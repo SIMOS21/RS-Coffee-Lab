@@ -1,0 +1,26 @@
+{
+  "project": "RS Coffee Lab",
+  "created_at": "2026-11-06",
+  "status": "specification_only",
+  "files": [
+    ".github/PULL_REQUEST_TEMPLATE.md",
+    "AGENTS.md",
+    "README.md",
+    "docs/01-PRODUCT.md",
+    "docs/02-BRAND-UX.md",
+    "docs/03-MENU.md",
+    "docs/04-ARCHITECTURE.md",
+    "docs/05-DATA-MODEL.md",
+    "docs/06-ORDER-LIFECYCLE.md",
+    "docs/07-API.md",
+    "docs/08-SECURITY-PRIVACY.md",
+    "docs/09-QUALITY.md",
+    "docs/10-DEPLOYMENT.md",
+    "docs/11-DECISIONS.md",
+    "docs/12-ROADMAP.md",
+    "prompts/CODEX-KICKOFF.md",
+    "prompts/CODEX-NEXT-TASK.md",
+    "prompts/CODEX-REVIEW.md",
+    "tasks/TASKS.md"
+  ]
+}
