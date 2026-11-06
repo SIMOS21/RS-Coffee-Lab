@@ -150,7 +150,7 @@ tasks/TASKS.md             backlog et comptes rendus
 prompts/                   consignes de travail et de revue
 ```
 
-L'arborescence métier cible reste décrite dans `docs/04-ARCHITECTURE.md`. Aucun schéma DB, authentification, catalogue, design final ou workflow CI n'est encore créé.
+L'arborescence métier cible reste décrite dans `docs/04-ARCHITECTURE.md`. Aucun schéma DB, authentification, catalogue ou design final n'est encore créé. Le workflow CI de T-002 est décrit ci-dessous.
 
 ### Versions et justification des dépendances
 
@@ -174,3 +174,87 @@ Procédure pour le développeur, après `pnpm.cmd build` :
 6. Arrêter le serveur avec `Ctrl+C`.
 
 Cette procédure manuelle est le repli demandé pour T-001. Elle ne vaut pas exécution de la recette visuelle, audit d'accessibilité ou autorisation de publication.
+
+## CI et environnements — T-002
+
+### Workflow GitHub Actions
+
+`.github/workflows/ci.yml` déclenche le workflow **CI**, job **Quality**, à chaque pull request, push de branche ou lancement manuel (ce dernier nécessite que le workflow soit présent sur la branche par défaut). Aucun filtre de nom de branche métier n'est imposé tant que la branche d'intégration n'est pas choisie.
+
+Le runner `ubuntu-24.04` lit Node dans `.node-version` et pnpm dans le champ `packageManager` de `package.json`. Les actions `checkout` v6, `setup-node` v6 et `pnpm/action-setup` v4 sont figées sur des SHA complets vérifiés dans leurs dépôts officiels. Mettre ces SHA à jour après revue de leurs nouvelles versions.
+
+Ordre des étapes : checkout → Node → pnpm → `pnpm check:env` → `pnpm install --frozen-lockfile` → `pnpm lint` → `pnpm typecheck` → `pnpm test` → `pnpm build`. Les contrôles sont séquentiels et toute erreur bloque les suivants. Durée maximale : 15 minutes. Un nouveau lancement pour la même PR/référence annule le précédent.
+
+Le job dispose uniquement de `contents: read` ; le checkout ne conserve pas les identifiants Git. Il n'utilise ni `pull_request_target`, ni environnement distant, ni secret de dépôt, ni upload d'artefact ou cache de build. Le build n'est pas publié. `NEXT_TELEMETRY_DISABLED=1` désactive la télémétrie Next et `TZ=Africa/Casablanca` fixe le fuseau du processus CI, sans remplacer les validations métier du futur module de créneaux.
+
+### Séparation des environnements
+
+| Contexte | Configuration actuelle | Données et secrets |
+|---|---|---|
+| Développement | `next dev` gère `NODE_ENV=development` ; `.env.local` facultatif et ignoré | Aucun secret ni service requis |
+| Tests | Vitest utilise `NODE_ENV=test`, explicitement fixé dans la CI | Aucun accès DB ; future base de test isolée |
+| Build CI | `NODE_ENV=production` pour `pnpm build`, aucun fichier `.env` copié | Aucun secret injecté ; un build production ne constitue pas un déploiement |
+| Staging/preview | Environnement distant non créé, accès privé à configurer avant toute preview | Données fictives et projet/identifiants séparés de production |
+| Production | Hébergement non configuré, aucun déploiement autorisé par ce ticket | Aucun secret de production disponible en CI qualité |
+
+Ne pas définir un `NODE_ENV=staging` : staging et production utilisent le mode de build production, mais leurs projets, secrets et données doivent être distincts. Aucun `.env.test` ou `.env.production` factice n'est ajouté au dépôt. Les futures variables applicatives ne seront introduites qu'au ticket qui les utilise, avec validation serveur et extension des contrôles.
+
+### Protection des fichiers d'environnement
+
+```powershell
+pnpm.cmd check:env
+```
+
+Le script autonome `scripts/check-env.mjs` contrôle les noms des fichiers suivis ou non ignorés par Git, y compris avant l'installation des dépendances. Il refuse les fichiers `.env*` autres que l'unique `.env.example` racine et les fichiers `.pem`/`.key`. L'exemple doit rester constitué de commentaires puisqu'aucune variable n'est consommée actuellement. Les tests de ce contrôle sont dans `tests/unit/environment-files.test.ts` ; `scripts/check-env.d.mts` décrit son interface TypeScript.
+
+Les fichiers locaux ignorés ne sont ni lus ni affichés. Le contrôle ne journalise aucune valeur et ne remplace pas un outil de détection de secrets dans tous les fichiers/historiques. Avant un commit, relire les fichiers indexés ; activer la détection et la protection contre les pushes de secrets sur GitHub si disponibles. Ne jamais publier une clé avec `NEXT_PUBLIC_` : les variables de ce préfixe peuvent être intégrées au JavaScript navigateur.
+
+### Reproduire les contrôles localement
+
+Dans PowerShell, exécuter les lignes dans l'ordre et s'arrêter au premier code de sortie non nul :
+
+```powershell
+pnpm.cmd check:env
+pnpm.cmd install --offline --frozen-lockfile --store-dir .pnpm-store
+pnpm.cmd lint
+pnpm.cmd typecheck
+pnpm.cmd test
+pnpm.cmd build
+```
+
+Omettre `--offline` lors d'une première installation. Sous Linux/CI, utiliser `pnpm`, avec le store par défaut de la machine ; ne pas réutiliser `node_modules` de Windows.
+
+Pour vérifier le workflow avec actionlint **1.7.12** installé depuis sa publication officielle, après contrôle du SHA-256 de l'archive avec les checksums fournis :
+
+```powershell
+actionlint -shellcheck= -pyflakes= .github/workflows/ci.yml
+```
+
+Cette commande vérifie YAML, structure GitHub Actions et expressions ; ShellCheck et Pyflakes sont désactivés dans ce contrôle local Windows. Elle n'exécute pas le workflow ni les actions GitHub. Aucun résultat Linux/GitHub vert n'est revendiqué sur la seule base des commandes locales.
+
+### Validation distante et protections staging à réaliser
+
+Le remote `origin` est configuré sur `https://github.com/SIMOS21/RS-Coffee-Lab.git`, URL fournie par le propriétaire. Le dépôt est public et vide à la vérification ; sa branche par défaut déclarée est `main`. La base T-001 est sauvegardée au commit local `4fbe368` ; la branche T-002 est `feat/t-002-ci-environments`. La connexion GitHub disponible dispose de la lecture uniquement (`push: false`, `admin: false`) : aucun contenu n'a été publié et aucun run n'existe encore.
+
+Avec une connexion autorisée en écriture sur ce dépôt :
+
+1. Publier la base T-001 sur `main` puis la branche T-002 ; ouvrir une PR de test vers `main`. Si le dépôt a changé depuis sa vérification, inspecter/fetcher son historique avant tout push, sans forcer. Vérifier les permissions Actions et les éventuelles approbations exigées pour les contributions externes.
+2. Attendre un lancement réel **CI / Quality** réussi sur le dernier commit de la PR. Consigner son URL, le SHA, le runner et la conclusion dans `tasks/TASKS.md` avant de passer T-002 à DONE.
+3. Sur la branche d'intégration choisie, configurer un ruleset ou une protection exigeant la PR, la revue et le contrôle **Quality** observé après ce premier run. Bloquer les pushes forcés et suppressions ; vérifier les contournements administrateur selon les droits disponibles.
+4. Avant une première preview/staging, activer la protection d'accès de l'hébergeur et vérifier qu'un visiteur non authentifié ne peut pas ouvrir le site. Une métadonnée `noindex` n'est pas un contrôle d'accès. Utiliser uniquement des données fictives, une DB et des identifiants séparés.
+5. Pour tout futur job de déploiement staging, créer un environnement GitHub `staging` avec branches explicitement autorisées et approbation d'un responsable désigné si le plan GitHub le permet. Ce job devra référencer l'environnement pour bénéficier de ses règles. Ne pas créer un job de déploiement sans ces protections ; si le plan ne les permet pas, garder le déploiement désactivé jusqu'à une solution approuvée.
+6. Garder la production séparée, sans identifiants dans la CI des PR. Toute publication de production relève de T-016 et de l'accord du propriétaire.
+
+Ces réglages ne sont **pas activés par la présence du YAML**. Leur disponibilité dépend du dépôt et du plan GitHub/hébergeur. T-002 reste BLOCKED tant que le pipeline de PR réel et les protections distantes concernées ne sont pas vérifiés.
+
+Pour le développeur disposant déjà des droits d'écriture et d'une authentification Git configurée, après vérification que le dépôt est toujours vide :
+
+```powershell
+git ls-remote origin
+git push origin feat/t-001-foundation:main
+git push -u origin feat/t-002-ci-environments
+```
+
+Ouvrir ensuite une PR `feat/t-002-ci-environments` vers `main` dans GitHub. Ces commandes sont une procédure à exécuter avec les droits requis, pas des publications déjà réalisées par l'agent. Aucun jeton ne doit être envoyé dans le chat ou enregistré dans l'URL du remote.
+
+Références : [setup-node](https://github.com/actions/setup-node), [pnpm/action-setup](https://github.com/pnpm/action-setup), [checkout](https://github.com/actions/checkout), [environnements et protections GitHub](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments), [publication actionlint 1.7.12](https://github.com/rhysd/actionlint/releases/tag/v1.7.12).
