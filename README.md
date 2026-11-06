@@ -106,7 +106,7 @@ Copy-Item -LiteralPath .env.example -Destination .env.local
 
 Ne pas écraser un fichier local déjà configuré. Les fichiers `.env*` sont ignorés, sauf `.env.example`. Ne jamais y inscrire un secret réel destiné à être versionné, ni exposer un secret avec `NEXT_PUBLIC_`. Les variables Supabase et les environnements distants seront ajoutés dans les tickets concernés.
 
-Aucun interrupteur d'environnement ne permet d'ouvrir les commandes à ce stade. La page affiche leur fermeture et ne fournit ni checkout ni API de commande. Le défaut DB `ordering_enabled=false` et les vérifications transactionnelles restent à réaliser en T-003/T-009/T-010, conformément à `docs/04-ARCHITECTURE.md`.
+Aucun interrupteur d'environnement ne permet d'ouvrir les commandes à ce stade. La page affiche leur fermeture et ne fournit ni checkout ni API de commande. T-003 prépare le défaut DB `ordering_enabled=false` ; sa validation réelle et les vérifications transactionnelles T-009/T-010 restent nécessaires, conformément à `docs/04-ARCHITECTURE.md`.
 
 ### Commandes disponibles
 
@@ -150,7 +150,7 @@ tasks/TASKS.md             backlog et comptes rendus
 prompts/                   consignes de travail et de revue
 ```
 
-L'arborescence métier cible reste décrite dans `docs/04-ARCHITECTURE.md`. Aucun schéma DB, authentification, catalogue, design final ou workflow CI n'est encore créé.
+L'arborescence métier cible reste décrite dans `docs/04-ARCHITECTURE.md`. T-003 ajoute le schéma et le seed SQL de démonstration décrits ci-dessous. Authentification applicative, catalogue affiché et design final restent à développer. La CI T-002 est dans une PR séparée non fusionnée à la création de cette branche.
 
 ### Versions et justification des dépendances
 
@@ -174,3 +174,62 @@ Procédure pour le développeur, après `pnpm.cmd build` :
 6. Arrêter le serveur avec `Ctrl+C`.
 
 Cette procédure manuelle est le repli demandé pour T-001. Elle ne vaut pas exécution de la recette visuelle, audit d'accessibilité ou autorisation de publication.
+
+## Base Supabase — T-003
+
+### Base Git et réserves
+
+La branche `feat/t-003-supabase-database` part de `main`/`origin/main` au commit `4fbe368`, récupéré depuis GitHub avec un dossier propre. La [PR T-002 #1](https://github.com/SIMOS21/RS-Coffee-Lab/pull/1) est encore ouverte ; son [run sur PR](https://github.com/SIMOS21/RS-Coffee-Lab/actions/runs/42303383948) est vert, mais elle n'est pas fusionnée et les protections restent en attente. T-002 n'est donc pas déclaré DONE. Aucun changement T-002 n'a été recopié dans cette branche ; rebaser/synchroniser la PR T-003 après sa fusion, en préservant les deux tickets séparés.
+
+### Installation et outils locaux
+
+Node 24.13.0 et pnpm 9.15.9 restent les versions de référence. Le CLI **Supabase 3.0.0** est une dépendance de développement exacte, justifiée par les migrations et tests locaux ; aucun SDK Supabase ni dépendance de production n'est ajouté. Docker Desktop doit être démarré en mode conteneurs Linux. Le projet local se nomme `rs-coffee-lab-test`, PostgreSQL **17** ; ports 54321 (API), 54322 (DB), 54320 (shadow). Utiliser un projet distinct si ces ports sont occupés, sans réutiliser un projet contenant des données réelles.
+
+```powershell
+pnpm.cmd install --frozen-lockfile --store-dir .pnpm-store
+docker info
+pnpm.cmd exec supabase --version
+pnpm.cmd db:start
+pnpm.cmd db:test
+pnpm.cmd db:stop
+```
+
+`db:start` démarre uniquement la stack locale : Auth sans inscription publique et API sur `public`. Studio, Storage, Realtime, SMTP, analytics et edge runtime sont désactivés pour cette fondation. Aucun login Supabase, lien vers un projet distant ou jeton cloud n'est nécessaire. Les clés locales générées éventuellement affichées par le CLI ne doivent être copiées ni dans le chat, ni dans les logs/commits.
+
+`db:test` **réinitialise la base locale de test**. Ne pas y stocker de données à conserver. Le script fixe le conteneur `supabase_db_rs-coffee-lab-test`, n'accepte aucune URL/option distante et exécute deux cycles complets : migrations depuis zéro (`supabase db reset --no-seed`), seed deux fois dans une transaction explicitement marquée `app.environment=test`, puis assertions SQL. Une erreur SQL ou de processus doit donner un code non nul. Ne jamais ajouter `--remote` à cette procédure. Le script utilise `psql` du conteneur, sans installation PostgreSQL sur Windows.
+
+### Fichiers et règles de sécurité
+
+| Fichier | Rôle |
+|---|---|
+| `supabase/config.toml` | Configuration locale, aucun projet distant, exposition API de `public` uniquement, grants automatiques désactivés |
+| `supabase/migrations/20261106000100_initial_schema.sql` | Migration transactionnelle des 14 tables, types, contraintes, index, grants, RLS et protections historiques |
+| `supabase/seed.sql` | 6 catégories et 17 références provisoires, idempotent, sans photos ni recettes inventées |
+| `supabase/tests/database.sql` | Assertions SQL avec arrêt au premier échec et rollback des données fictives de test |
+| `scripts/test-database.mjs` | Recréation locale deux fois, double seed et exécution des tests |
+
+Les cinq tables catalogue sont dans `public`. Leur lecture publique exige visibilité et validation explicite ; les suppléments exigent aussi activation/éligibilité. Le seed ne publie aucun produit : `validation_status=provisional`, `is_visible=false`, `is_available=false`, `image_path=NULL`. Les catégories sont masquées ; aucune règle de supplément inconnue n'est créée. Les 17 prix transcrits sont stockés en centimes entiers et restent non validés par le commerce.
+
+Les commandes, lignes/options figées, historiques, personnel, paramètres/horaires et audit sont dans `app_private`, non exposé à la Data API. RLS est activée sur toutes les tables de l'application. `anon` n'a aucun accès au schéma privé. Les utilisateurs authentifiés ordinaires ne voient aucune commande ; les lectures préparées pour le personnel dépendent d'une ligne `staff_members` active liée à `auth.uid()`, jamais d'un rôle fourni par le navigateur. Une fonction privée `SECURITY DEFINER` à `search_path` vide évite la récursion RLS ; son exécution est refusée à `anon`.
+
+Aucune mutation directe des tables de l'application n'est accordée à `anon`, `authenticated` ou `service_role`, même si ce dernier peut contourner RLS. Les accès serveur futurs devront être étroits et validés dans leurs handlers/RPC. Aucun membre du personnel ni compte admin n'est seedé. Les snapshots de lignes et événements sont append-only, les suppressions de produits référencés sont bloquées, et toutes les dates d'événements sont en `timestamptz` (instants UTC, fuseau métier `Africa/Casablanca`).
+
+`business_settings` est un singleton créé avec `ordering_enabled=false` et sans délai/capacité inventés. Aucune plage horaire réelle n'est insérée. Une configuration partielle ne peut pas être activée ; la validation complète des horaires/fermetures/créneaux reste T-009. Les horaires après minuit et plusieurs plages par jour ne sont pas activés sans validation métier.
+
+La table `orders` prépare clé d'idempotence unique et empreinte du payload, hash SHA-256 de suivi, snapshots et statuts typés. **Ce ticket n'implémente pas la création transactionnelle, le calcul serveur des totaux/options, les verrous de capacité, les transitions de statut ni le marquage payé** : ces flux et leurs tests appartiennent à T-010/T-012. Ils ne sont pas accessibles par une API à ce stade. Les métadonnées d'audit devront être construites par allowlist côté serveur avant toute écriture future ; le type JSON objet seul ne retire pas les PII.
+
+### Seed, environnements et variables
+
+Le seed automatique est désactivé dans la configuration. `seed.sql` refuse de s'exécuter sans `app.environment=test` explicite dans la session ; seul le script local de test le fixe. Ce marqueur est un garde-fou contre un lancement accidentel, pas une barrière contre un administrateur malveillant. Ne jamais exécuter ce seed contre un projet distant ou de production. `ON CONFLICT DO NOTHING` évite doublons et écrasement des modifications existantes ; le seed ne change jamais les paramètres d'ouverture.
+
+Aucune variable applicative ni clé Supabase n'est encore consommée par Next.js : `.env.example` reste constitué de commentaires et décrit ce contrat. Les futurs paramètres d'accès seront introduits avec l'intégration qui les utilise ; ne pas ajouter de secret ni de fausse URL maintenant. `.env*`, `supabase/.temp/` et `.branches/` sont ignorés. Les projets de test, staging et production devront être distincts ; aucun projet de production n'est lié ici.
+
+### Validation et limites
+
+Les assertions SQL couvrent les contraintes de prix/quantité, FK, unicité idempotente, fermeture par défaut, immutabilité des snapshots, anonymes/non-personnel/inactifs, lectures staff/admin et refus de mutation. Un test donne temporairement des grants à `anon` dans une transaction rollback pour vérifier que RLS protège encore les commandes de deux clients fictifs indépendamment des grants. Un autre vérifie la lecture d'un seul produit explicitement confirmé/publié. Le runner vérifie deux recréations et deux passages du seed par recréation.
+
+À la préparation, `db:start` et `db:test` ont échoué avant les migrations car le moteur Docker Linux n'était pas accessible. **Les tests SQL et la reproductibilité ne sont pas déclarés validés tant que `pnpm.cmd db:test` ne termine pas réellement avec code 0.** La cohérence statique des 17 SKU/prix avec le Markdown et la syntaxe TOML ont été contrôlées séparément ; cela ne constitue pas une validation PostgreSQL/RLS. Voir le résultat final dans `tasks/TASKS.md`.
+
+Ne pas modifier une migration appliquée en staging/production. Pour cette migration non déployée, reprise locale par reset de la stack de test ; un rollback de production devra faire l'objet d'un plan de sauvegarde/restauration approuvé. Ne pas supprimer un schéma historique pour annuler une fonctionnalité.
+
+Références officielles : [CLI v3](https://supabase.com/docs/guides/local-development/cli/migrating-to-v3), [RLS](https://supabase.com/docs/guides/database/postgres/row-level-security), [seed](https://supabase.com/docs/guides/local-development/seeding-your-database), [sécurité API](https://supabase.com/docs/guides/api/securing-your-api).

@@ -46,3 +46,13 @@ UPDATE conditionnel sur statut actuel + insertion événement atomique ; l'API r
 
 ## Décisions ouvertes
 Téléphone obligatoire ou email ; gestion produits allergènes, politique rétention des commandes, taxes, moyen de paiement. Référence `docs/11-DECISIONS.md`.
+
+## Fondation SQL T-003
+
+Migration : `supabase/migrations/20261106000100_initial_schema.sql`. Les 5 tables catalogue sont dans `public`, les 9 tables sensibles dans `app_private` (non exposé par la configuration API). `products.sort_order` complète l'index de tri prévu. `products.validation_status` et `modifier_groups.validation_status` distinguent `provisional` de `confirmed` ; une entrée provisoire ne peut pas être publiée/activée. `image_path` reste nullable.
+
+`orders.payload_hash` est obligatoire pour préparer la liaison d'idempotence au contenu. Hashs suivi/payload : SHA-256 hexadécimal, 64 caractères ; aucun token brut persistant. `currency` est contrainte à `MAD`, montants SQL `integer`, dates d'événements `timestamptz`. Les FK historiques utilisent RESTRICT ; les lignes et événements refusent UPDATE/DELETE par trigger. La fonction de rôle personnel est privée, à chemin vide, liée à `auth.uid()` et au flag `active`.
+
+Tous les rôles API, y compris `service_role`, sont privés de mutations directes sur ces tables. Les lectures catalogue confirmé et personnel autorisé sont préparées avec grants SELECT et RLS ; la gestion serveur des rôles/mutations n'est pas livrée par ce ticket. Les contrôles transactionnels inter-tables (prix/options/totaux exacts, capacité, insertion avec événement initial), transitions et audits des futures actions restent à implémenter dans leurs tickets avant toute ouverture.
+
+Le singleton paramètres commence fermé, délais/capacité NULL ; pas d'horaires réels ni de personnel seedés. Le seed est une démonstration explicite et idempotente, sans écrasement ; il est désactivé par défaut. Les limites quantitatives métier et les horaires après minuit restent non validés. Les tests et leur procédure réelle d'exécution locale sont décrits dans le README ; un contrôle statique ne vaut pas validation DB.
