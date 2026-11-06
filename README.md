@@ -106,7 +106,7 @@ Copy-Item -LiteralPath .env.example -Destination .env.local
 
 Ne pas écraser un fichier local déjà configuré. Les fichiers `.env*` sont ignorés, sauf `.env.example`. Ne jamais y inscrire un secret réel destiné à être versionné, ni exposer un secret avec `NEXT_PUBLIC_`. Les variables Supabase et les environnements distants seront ajoutés dans les tickets concernés.
 
-Aucun interrupteur d'environnement ne permet d'ouvrir les commandes à ce stade. La page affiche leur fermeture et ne fournit ni checkout ni API de commande. T-003 prépare le défaut DB `ordering_enabled=false` ; sa validation réelle et les vérifications transactionnelles T-009/T-010 restent nécessaires, conformément à `docs/04-ARCHITECTURE.md`.
+Aucun interrupteur d'environnement ne permet d'ouvrir les commandes à ce stade. La page affiche leur fermeture et ne fournit ni checkout ni API de commande. Le défaut DB `ordering_enabled=false` a été validé localement en T-003 ; les vérifications transactionnelles T-009/T-010 restent nécessaires, conformément à `docs/04-ARCHITECTURE.md`.
 
 ### Commandes disponibles
 
@@ -228,7 +228,9 @@ Aucune variable applicative ni clé Supabase n'est encore consommée par Next.js
 
 Les assertions SQL couvrent les contraintes de prix/quantité, FK, unicité idempotente, fermeture par défaut, immutabilité des snapshots, anonymes/non-personnel/inactifs, lectures staff/admin et refus de mutation. Un test donne temporairement des grants à `anon` dans une transaction rollback pour vérifier que RLS protège encore les commandes de deux clients fictifs indépendamment des grants. Un autre vérifie la lecture d'un seul produit explicitement confirmé/publié. Le runner vérifie deux recréations et deux passages du seed par recréation.
 
-À la préparation, `db:start` et `db:test` ont échoué avant les migrations car le moteur Docker Linux n'était pas accessible. **Les tests SQL et la reproductibilité ne sont pas déclarés validés tant que `pnpm.cmd db:test` ne termine pas réellement avec code 0.** La cohérence statique des 17 SKU/prix avec le Markdown et la syntaxe TOML ont été contrôlées séparément ; cela ne constitue pas une validation PostgreSQL/RLS. Voir le résultat final dans `tasks/TASKS.md`.
+Après démarrage de Docker Desktop, la validation réelle locale a réussi : Docker 29.0.1, Supabase CLI 3.0.0, PostgreSQL 17. `pnpm.cmd db:start` termine avec code 0 et applique la migration. `pnpm.cmd db:test` termine avec code 0 après deux reconstructions complètes ; chaque cycle applique deux fois le seed (6 catégories/17 produits puis 0 insertion supplémentaire) et exécute toutes les assertions SQL de contraintes, relations, historique et RLS. Les données fictives des tests sont annulées par rollback. `pnpm.cmd exec supabase db lint` termine avec code 0 : `No schema errors found`.
+
+Le runner utilise directement Node pour appeler pnpm, sans shell intermédiaire. Le GRANT inutile sur le schéma temporaire des helpers de test a été supprimé ; les deux cycles ont été relancés avec succès après ces corrections. La cohérence statique des 17 SKU/prix avec le Markdown et la syntaxe TOML ont également été contrôlées. Cette validation concerne uniquement la stack locale ; aucun résultat staging/production ni test de parcours de commande n'est revendiqué. Voir le compte rendu dans `tasks/TASKS.md`.
 
 Ne pas modifier une migration appliquée en staging/production. Pour cette migration non déployée, reprise locale par reset de la stack de test ; un rollback de production devra faire l'objet d'un plan de sauvegarde/restauration approuvé. Ne pas supprimer un schéma historique pour annuler une fonctionnalité.
 

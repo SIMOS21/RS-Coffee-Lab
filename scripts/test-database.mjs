@@ -3,13 +3,16 @@ import { readFileSync } from "node:fs";
 
 // Target fixed to this disposable local Docker stack; accepts no URL/remote argument.
 const container = "supabase_db_rs-coffee-lab-test";
-const pnpm = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
+const pnpmCli = process.env.npm_execpath;
+if (!pnpmCli) {
+  console.error("Run this verification through pnpm db:test.");
+  process.exit(1);
+}
 
 function run(command, args, input) {
   const result = spawnSync(command, args, {
     input,
     encoding: "utf8",
-    shell: process.platform === "win32" && command === pnpm,
     stdio: input ? ["pipe", "inherit", "inherit"] : "inherit",
   });
   if (result.error || result.status !== 0) {
@@ -25,7 +28,7 @@ const psql = ["exec", "-i", container, "psql", "-X", "-U", "postgres", "-d", "po
 // Two complete migration rebuilds, each followed by two seed executions and SQL assertions.
 for (let attempt = 1; attempt <= 2; attempt++) {
   console.log(`Local database reproducibility pass ${attempt}/2`);
-  run(pnpm, ["exec", "supabase", "db", "reset", "--no-seed"]);
+  run(process.execPath, [pnpmCli, "exec", "supabase", "db", "reset", "--no-seed"]);
   run("docker", psql, `begin; set local app.environment = 'test';\n${seed}\n${seed}\ncommit;\n`);
   run("docker", psql, tests);
 }

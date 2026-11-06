@@ -7,9 +7,6 @@ language plpgsql as $$ begin
   if condition is distinct from true then raise exception 'TEST FAILED: %', message; end if;
 end $$;
 
-do $$ begin
-  execute format('grant usage on schema %I to anon, authenticated', pg_my_temp_schema()::regnamespace);
-end $$;
 create function pg_temp.expect_error(statement text, expected_code text) returns void
 language plpgsql as $$ begin
   begin
