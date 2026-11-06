@@ -234,7 +234,7 @@ Cette commande vérifie YAML, structure GitHub Actions et expressions ; ShellChe
 
 ### Validation distante et protections staging à réaliser
 
-Le remote `origin` est configuré sur `https://github.com/SIMOS21/RS-Coffee-Lab.git`, URL fournie par le propriétaire. Le dépôt est public et vide à la vérification ; sa branche par défaut déclarée est `main`. La base T-001 est sauvegardée au commit local `4fbe368` ; la branche T-002 est `feat/t-002-ci-environments`. La connexion GitHub disponible dispose de la lecture uniquement (`push: false`, `admin: false`) : aucun contenu n'a été publié et aucun run n'existe encore.
+Le remote `origin` est configuré sur `https://github.com/SIMOS21/RS-Coffee-Lab.git`, URL fournie par le propriétaire. La base T-001 `4fbe368` a été publiée sur `main` et le commit T-002 `5127678` sur `feat/t-002-ci-environments`, sans push forcé, grâce à l'authentification Git locale déjà configurée. Le connecteur GitHub reste en lecture seule : la création de PR par son API est refusée (`403 Resource not accessible by integration`). Le [run CI 42302008681 sur push](https://github.com/SIMOS21/RS-Coffee-Lab/actions/runs/42302008681) a réussi sur ce commit ; il ne remplace pas le run de PR requis. La branche `main` a été vérifiée comme non protégée ; les réglages d'administration restent à réaliser.
 
 Avec une connexion autorisée en écriture sur ce dépôt :
 
@@ -247,14 +247,12 @@ Avec une connexion autorisée en écriture sur ce dépôt :
 
 Ces réglages ne sont **pas activés par la présence du YAML**. Leur disponibilité dépend du dépôt et du plan GitHub/hébergeur. T-002 reste BLOCKED tant que le pipeline de PR réel et les protections distantes concernées ne sont pas vérifiés.
 
-Pour le développeur disposant déjà des droits d'écriture et d'une authentification Git configurée, après vérification que le dépôt est toujours vide :
+Les deux branches sont désormais publiées. Pour publier les éventuels nouveaux commits T-002 depuis la branche courante avec une authentification Git autorisée :
 
 ```powershell
-git ls-remote origin
-git push origin feat/t-001-foundation:main
-git push -u origin feat/t-002-ci-environments
+git push origin feat/t-002-ci-environments
 ```
 
-Ouvrir ensuite une PR `feat/t-002-ci-environments` vers `main` dans GitHub. Ces commandes sont une procédure à exécuter avec les droits requis, pas des publications déjà réalisées par l'agent. Aucun jeton ne doit être envoyé dans le chat ou enregistré dans l'URL du remote.
+Ouvrir ensuite une [PR `feat/t-002-ci-environments` vers `main`](https://github.com/SIMOS21/RS-Coffee-Lab/compare/main...feat/t-002-ci-environments?expand=1) dans GitHub, ou donner au connecteur les droits nécessaires pour la créer. Ne pas fusionner avant revue et validation des critères restants. Aucun jeton ne doit être envoyé dans le chat ou enregistré dans l'URL du remote.
 
 Références : [setup-node](https://github.com/actions/setup-node), [pnpm/action-setup](https://github.com/pnpm/action-setup), [checkout](https://github.com/actions/checkout), [environnements et protections GitHub](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments), [publication actionlint 1.7.12](https://github.com/rhysd/actionlint/releases/tag/v1.7.12).
